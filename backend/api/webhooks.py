@@ -28,16 +28,21 @@ async def github_webhook(
     signature = request.headers.get("X-Hub-Signature-256", "")
 
     if not verify_signature(payload_bytes, signature):
+        print("❌ Signature verification failed")
         raise HTTPException(status_code=401, detail="Invalid signature")
 
     event = request.headers.get("X-GitHub-Event")
     data = json.loads(payload_bytes)
+
+    print(f"✅ Event received: {event}, action: {data.get('action')}")
 
     if event == "pull_request" and data.get("action") in ("opened", "synchronize"):
         pr = data["pull_request"]
         installation_id = data["installation"]["id"]
         repo_full = data["repository"]["full_name"]
         owner, repo_name = repo_full.split("/")
+
+        print(f"📝 Creating review for PR #{pr['number']} in {repo_full}")
 
         review = Review(
             repo=repo_full,
@@ -49,6 +54,8 @@ async def github_webhook(
         db.add(review)
         await db.commit()
         await db.refresh(review)
+
+        print(f"✅ Review saved to DB: {review.id}")
 
         background_tasks.add_task(
             run_review_graph,
